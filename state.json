@@ -1,0 +1,19 @@
+{
+  "nodes": [
+    {
+      "ID": "node-worker-01",
+      "ActiveTasks": 2,
+      "MaxCapacity": 10
+    },
+    {
+      "ID": "node-worker-02",
+      "ActiveTasks": 1,
+      "MaxCapacity": 10
+    },
+    {
+      "ID": "node-worker-03",
+      "ActiveTasks": 1,
+      "MaxCapacity": 10
+    }
+  ]
+}
