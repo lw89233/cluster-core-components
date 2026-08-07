@@ -2,75 +2,98 @@ package storage
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
 )
 
+var ErrOlderVersion = errors.New("snapshot version is older than current")
+
+type Snapshot struct {
+	Version     int64             `json:"version"`
+	Assignments map[string]string `json:"assignments"`
+}
+
 type JSONStore struct {
-	mu sync.RWMutex
+	mu       sync.RWMutex
+	filepath string
+	version  int64
 }
 
-func NewJSONStore() *JSONStore {
-	return &JSONStore{}
+func NewJSONStore(path string) *JSONStore {
+	return &JSONStore{
+		filepath: path,
+	}
 }
 
-func (s *JSONStore) AtomicWrite(filePath string, data interface{}) error {
+func (s *JSONStore) Save(snapshot Snapshot) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	dir := filepath.Dir(filePath)
+	if snapshot.Version < s.version {
+		return ErrOlderVersion
+	}
+
+	dir := filepath.Dir(s.filepath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
+		return err
 	}
 
-	jsonData, err := json.MarshalIndent(data, "", "  ")
+	data, err := json.MarshalIndent(snapshot, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal data: %w", err)
+		return err
 	}
 
-	tmpFile, err := os.CreateTemp(dir, "temp-*.json")
+	tmpFile, err := os.CreateTemp(dir, "state-tmp-*")
 	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
+		return err
 	}
 	tmpName := tmpFile.Name()
 
-	defer os.Remove(tmpName)
-
-	if _, err := tmpFile.Write(jsonData); err != nil {
+	defer func() {
 		tmpFile.Close()
-		return fmt.Errorf("failed to write to temp file: %w", err)
+		os.Remove(tmpName)
+	}()
+
+	if _, err := tmpFile.Write(data); err != nil {
+		return err
 	}
 
 	if err := tmpFile.Sync(); err != nil {
-		tmpFile.Close()
-		return fmt.Errorf("failed to sync temp file: %w", err)
+		return err
 	}
 
 	if err := tmpFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp file: %w", err)
+		return err
 	}
 
-	if err := os.Rename(tmpName, filePath); err != nil {
-		return fmt.Errorf("failed to rename temp file: %w", err)
+	if err := os.Rename(tmpName, s.filepath); err != nil {
+		return err
 	}
 
+	s.version = snapshot.Version
 	return nil
 }
 
-func (s *JSONStore) Read(filePath string, v interface{}) error {
+func (s *JSONStore) Load() (Snapshot, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	data, err := os.ReadFile(filePath)
+	var snap Snapshot
+
+	data, err := os.ReadFile(s.filepath)
 	if err != nil {
-		return fmt.Errorf("failed to read file: %w", err)
+		if errors.Is(err, os.ErrNotExist) {
+			return snap, nil
+		}
+		return snap, err
 	}
 
-	if err := json.Unmarshal(data, v); err != nil {
-		return fmt.Errorf("failed to unmarshal data: %w", err)
+	if err := json.Unmarshal(data, &snap); err != nil {
+		return snap, err
 	}
 
-	return nil
+	s.version = snap.Version
+	return snap, nil
 }
