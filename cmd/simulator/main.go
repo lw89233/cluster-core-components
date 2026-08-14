@@ -27,12 +27,16 @@ func main() {
 		snap.Version = 1
 	}
 
-	nodes := []string{"node-1", "node-3"}
+	nodes := []scheduler.Node{
+		{ID: "node-1", CPU: 4, RAM: 8},
+		{ID: "node-3", CPU: 8, RAM: 16},
+	}
 
 	tasks := []scheduler.Task{
-		{ID: "db-1", Stateful: true},
-		{ID: "web-1", Stateful: false},
-		{ID: "web-2", Stateful: false},
+		{ID: "db-1", GroupID: "db", Stateful: true, ReqCPU: 2, ReqRAM: 4},
+		{ID: "web-1", GroupID: "web", Stateful: false, ReqCPU: 1, ReqRAM: 2},
+		{ID: "web-2", GroupID: "web", Stateful: false, ReqCPU: 1, ReqRAM: 2},
+		{ID: "web-3", GroupID: "web", Stateful: false, ReqCPU: 1, ReqRAM: 2},
 	}
 
 	sched := scheduler.New()
@@ -55,8 +59,8 @@ func main() {
 	rec := reconciler.New()
 	actions := rec.ComputeActions(desiredState, actualState)
 
-	for taskID, node := range newAssignments {
-		fmt.Printf("ASSIGN\t%s\t%s\n", taskID, node)
+	for taskID, nodeID := range newAssignments {
+		fmt.Printf("ASSIGN\t%s\t%s\n", taskID, nodeID)
 	}
 
 	for _, action := range actions {
