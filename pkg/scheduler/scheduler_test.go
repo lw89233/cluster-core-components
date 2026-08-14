@@ -11,49 +11,58 @@ func TestAssign(t *testing.T) {
 	tests := []struct {
 		name     string
 		tasks    []Task
-		nodes    []string
+		nodes    []Node
 		previous map[string]string
 		expected map[string]string
 	}{
 		{
-			name: "Stateless tasks least containers",
+			name: "Resource limits filtering",
 			tasks: []Task{
-				{ID: "task-1", Stateful: false},
-				{ID: "task-2", Stateful: false},
-				{ID: "task-3", Stateful: false},
+				{ID: "heavy", GroupID: "g1", Stateful: false, ReqCPU: 8, ReqRAM: 16},
+				{ID: "light", GroupID: "g2", Stateful: false, ReqCPU: 1, ReqRAM: 1},
 			},
-			nodes:    []string{"node-2", "node-1"},
+			nodes: []Node{
+				{ID: "node-1", CPU: 2, RAM: 4},
+				{ID: "node-2", CPU: 16, RAM: 32},
+			},
 			previous: nil,
 			expected: map[string]string{
-				"task-1": "node-1",
-				"task-2": "node-2",
-				"task-3": "node-1",
+				"heavy": "node-2",
+				"light": "node-2",
 			},
 		},
 		{
-			name: "Stateful task pinned",
+			name: "Anti-affinity spreading",
 			tasks: []Task{
-				{ID: "db-1", Stateful: true},
+				{ID: "t-1", GroupID: "web", Stateful: false, ReqCPU: 1, ReqRAM: 1},
+				{ID: "t-2", GroupID: "web", Stateful: false, ReqCPU: 1, ReqRAM: 1},
 			},
-			nodes: []string{"node-1", "node-2", "node-3"},
+			nodes: []Node{
+				{ID: "node-1", CPU: 4, RAM: 8},
+				{ID: "node-2", CPU: 4, RAM: 8},
+			},
+			previous: nil,
+			expected: map[string]string{
+				"t-1": "node-1",
+				"t-2": "node-2",
+			},
+		},
+		{
+			name: "Stateful task pinned and affects scoring",
+			tasks: []Task{
+				{ID: "db-1", GroupID: "db", Stateful: true, ReqCPU: 2, ReqRAM: 4},
+				{ID: "web-1", GroupID: "web", Stateful: false, ReqCPU: 2, ReqRAM: 4},
+			},
+			nodes: []Node{
+				{ID: "node-1", CPU: 4, RAM: 8},
+				{ID: "node-2", CPU: 4, RAM: 8},
+			},
 			previous: map[string]string{
 				"db-1": "node-2",
 			},
 			expected: map[string]string{
-				"db-1": "node-2",
-			},
-		},
-		{
-			name: "Stateful task repinned when node dies",
-			tasks: []Task{
-				{ID: "db-1", Stateful: true},
-			},
-			nodes: []string{"node-1", "node-3"},
-			previous: map[string]string{
-				"db-1": "node-2",
-			},
-			expected: map[string]string{
-				"db-1": "node-1",
+				"db-1":  "node-2",
+				"web-1": "node-1",
 			},
 		},
 	}
